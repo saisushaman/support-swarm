@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Test
+        run: pytest -q
+
+      # The demo walks every terminal state, so it is a cheap end-to-end smoke
+      # test of the wiring the unit tests stub out.
+      - name: Smoke test the full pipeline
+        env:
+          SWARM_DATABASE_URL: sqlite+aiosqlite:///./ci.db
+          SWARM_LOG_LEVEL: ERROR
+        run: python -m support_swarm demo
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t support-swarm:ci .
+      - name: Container starts and reports healthy
+        run: |
+          docker run -d --name swarm -p 8000:8000 \
+            -e SWARM_DATABASE_URL="sqlite+aiosqlite:///./swarm.db" \
+            -e SWARM_SESSION_URL="memory://" \
+            support-swarm:ci
+          for i in $(seq 1 30); do
+            if curl -fsS localhost:8000/healthz > /dev/null; then
+              echo "healthy"; docker logs swarm; exit 0
+            fi
+            sleep 2
+          done
+          echo "never became healthy"; docker logs swarm; exit 1

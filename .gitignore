@@ -1,0 +1,28 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# local state
+.env
+*.db
+*.sqlite3
+demo.db
+support_swarm.db
+
+# editors / os
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

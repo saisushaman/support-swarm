@@ -1,0 +1,60 @@
+# Local full stack: Postgres + Redis + the API, with stub providers so nothing
+# external is touched. `docker compose up --build` then open localhost:8000/docs
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: swarm
+      POSTGRES_PASSWORD: swarm
+      POSTGRES_DB: swarm
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./src/support_swarm/db/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swarm -d swarm"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redisdata:/data
+
+  api:
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      SWARM_DATABASE_URL: postgresql+asyncpg://swarm:swarm@postgres:5432/swarm
+      SWARM_SESSION_URL: redis://redis:6379/0
+      SWARM_ORCHESTRATOR: deterministic
+      SWARM_PROVIDER_MODE: stub
+      SWARM_LLM_ENABLED: "false"
+      SWARM_LOG_JSON: "true"
+      SWARM_API_KEYS: "dev-key:agent,dev-admin-key:agent|admin"
+    ports: ["8000:8000"]
+
+  # One-shot: load the demo dataset once Postgres is up.
+  seed:
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      SWARM_DATABASE_URL: postgresql+asyncpg://swarm:swarm@postgres:5432/swarm
+      SWARM_SESSION_URL: memory://
+    command: ["python", "-m", "support_swarm", "seed"]
+    restart: "no"
+
+volumes:
+  pgdata:
+  redisdata:
