@@ -171,7 +171,9 @@ the policy engine enforces and why.
 * all guardrails, including boundary cases on both refund limits;
 * the real REST provider path (`providers/http.py`) against a live ASGI service,
   including that a declined refund is never retried;
-* the LLM gateway's parsing and retry classification.
+* the LLM gateway's parsing and retry classification;
+* the Docker image: CI builds it, starts it, and waits for `/healthz`;
+* Python 3.11, 3.12 and 3.13 in CI (development happened on 3.14).
 
 **Written but not executed here:**
 

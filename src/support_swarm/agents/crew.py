@@ -138,9 +138,15 @@ class CrewOrchestrator:
 
     # -- crew construction -------------------------------------------------- #
 
-    async def _run_crew(self, ctx: RunContext) -> dict[str, Any] | None:
+    @staticmethod
+    def build_crew(ctx: RunContext, loop: asyncio.AbstractEventLoop):
+        """Assemble the hierarchical crew.
+
+        Separated from :meth:`_run_crew` so the wiring -- roles, delegation,
+        hierarchical process, and the read-only tool bridge -- can be asserted
+        in tests without a model call, which needs credentials and a network.
+        """
         crewai = _require_crewai()
-        loop = asyncio.get_running_loop()
         tools = _build_read_tools(ctx, loop)
 
         supervisor = crewai.Agent(
@@ -198,7 +204,7 @@ class CrewOrchestrator:
             agent=supervisor,
         )
 
-        crew = crewai.Crew(
+        return crewai.Crew(
             agents=[db_agent, verifier],
             tasks=[analyse],
             process=crewai.Process.hierarchical,
@@ -206,6 +212,8 @@ class CrewOrchestrator:
             verbose=False,
         )
 
+    async def _run_crew(self, ctx: RunContext) -> dict[str, Any] | None:
+        crew = self.build_crew(ctx, asyncio.get_running_loop())
         try:
             # kickoff() is blocking; keep the event loop free for the bridged tools.
             raw = await asyncio.wait_for(
