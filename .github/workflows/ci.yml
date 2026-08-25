@@ -52,7 +52,7 @@ jobs:
       - name: Container starts and reports healthy
         run: |
           docker run -d --name swarm -p 8000:8000 \
-            -e SWARM_DATABASE_URL="sqlite+aiosqlite:///./swarm.db" \
+            -e SWARM_DATABASE_URL="sqlite+aiosqlite:////data/swarm.db" \
             -e SWARM_SESSION_URL="memory://" \
             support-swarm:ci
           for i in $(seq 1 30); do

@@ -12,8 +12,17 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir ".[server]"
 
-# Run unprivileged: the process needs no write access to its own code.
-RUN useradd --create-home --uid 10001 swarm
+# Run unprivileged: the process needs no write access to its own code, so /app
+# stays root-owned. Anything the process writes goes to /data instead -- without
+# a writable directory of its own, a SQLite-backed container cannot create its
+# database file and fails at startup.
+RUN useradd --create-home --uid 10001 swarm \
+    && mkdir -p /data \
+    && chown swarm:swarm /data
+
+ENV SWARM_DATABASE_URL="sqlite+aiosqlite:////data/swarm.db"
+VOLUME ["/data"]
+
 USER swarm
 
 EXPOSE 8000
