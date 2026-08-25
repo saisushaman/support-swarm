@@ -22,6 +22,16 @@ import asyncio
 import json
 from typing import Any
 
+# pydantic is imported at module scope, not inside the builder below, and this
+# matters. `from __future__ import annotations` turns every annotation into a
+# string, and pydantic resolves those against the *module* namespace of the
+# class. A CrewAI tool model built inside a function with a locally-imported
+# BaseModel is therefore unresolvable -- pydantic raises
+# "`_Bridged` is not fully defined" the moment the tool is constructed, which
+# broke the crew before it reached a single ticket. crewai itself stays lazily
+# imported; pydantic is already a hard dependency via FastAPI.
+from pydantic import BaseModel, Field
+
 from ..core.injection import wrap_untrusted
 from ..core.logging import get_logger
 from ..core.policy import AgentRole
@@ -60,7 +70,6 @@ def _build_read_tools(ctx: RunContext, loop: asyncio.AbstractEventLoop) -> list[
     safe.
     """
     from crewai.tools import BaseTool  # type: ignore[import-not-found]
-    from pydantic import BaseModel, Field
 
     from ..core.policy import Risk
     from ..tools.base import registry
@@ -92,6 +101,9 @@ def _build_read_tools(ctx: RunContext, loop: asyncio.AbstractEventLoop) -> list[
                 result = future.result(timeout=ctx.runner.settings.resolution_timeout_seconds)
                 return json.dumps(result.as_dict(), default=str)
 
+        # Explicit: resolves the forward references now, at build time, rather
+        # than at first use deep inside a crew run.
+        _Bridged.model_rebuild()
         return _Bridged()
 
     return [make(s) for s in registry.for_role(AgentRole.DATABASE_QUERY) if s.risk is Risk.READ]
