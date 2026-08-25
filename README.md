@@ -94,9 +94,10 @@ stub providers so nothing external is touched.
 * `SWARM_ORCHESTRATOR=crewai` — a hierarchical CrewAI crew (manager + workers)
   does the *analysis* with the read-only tools bridged in. Its output is a
   **proposal**; execution returns to the same policed path. A jailbroken crew
-  produces a bad proposal, not a bad outcome. Needs `pip install -e ".[crewai]"`
-  and **Python 3.11–3.13** — CrewAI does not support 3.14 yet. See
-  [Status](#status-what-is-verified-and-what-is-not).
+  produces a bad proposal, not a bad outcome — and that the crew can only reach
+  read-only tools is asserted in CI, not merely intended. Needs
+  `pip install -e ".[crewai]"` and **Python 3.11–3.13**; CrewAI does not support
+  3.14 yet.
 
 Set `SWARM_LLM_ENABLED=true` to route triage and QA judgement through LiteLLM
 (`llm/gateway.py`). The model can only *tighten* a QA verdict, never loosen one,
@@ -129,7 +130,7 @@ curl -s -X POST localhost:8000/v1/tickets/$TICKET/approve \
 pytest
 ```
 
-177 tests. They cover the guardrails directly — refund ceilings and windows,
+183 tests. They cover the guardrails directly — refund ceilings and windows,
 scope denial, fraud-hold refusal, identity mismatch, injection containment,
 idempotent replay, QA veto — plus each end-to-end terminal state, the API
 contract, and the real HTTP provider path.
@@ -162,7 +163,7 @@ the policy engine enforces and why.
 
 ## Status: what is verified, and what is not
 
-**Verified end to end** (177 tests, ruff clean):
+**Verified end to end** (183 tests, ruff clean — the 6 CrewAI tests skip off-CI):
 
 * the full pipeline over HTTP — file a ticket, get a resolved/held/escalated
   outcome, read the audit transcript;
@@ -173,20 +174,25 @@ the policy engine enforces and why.
   including that a declined refund is never retried;
 * the LLM gateway's parsing and retry classification;
 * the Docker image: CI builds it, starts it, and waits for `/healthz`;
-* Python 3.11, 3.12 and 3.13 in CI (development happened on 3.14).
+* Python 3.11, 3.12 and 3.13 in CI (development happened on 3.14);
+* the CrewAI wiring, in the one place it can run — CI on 3.12 with the extra
+  installed. It asserts the crew is hierarchical with the Supervisor managing,
+  only the manager delegates, the ticket body arrives fenced as untrusted, a
+  bridged tool really executes through the policed runner, and **every tool the
+  crew can reach is `Risk.READ`** (`issue_refund`, `reset_password` and
+  `set_entitlement` asserted absent). That job caught the bridge failing to
+  construct at all on its very first run.
 
-**Written but not executed here:**
+**Not executed anywhere yet:**
 
-* **The CrewAI orchestrator.** CrewAI supports Python `<3.14`; this was built on
-  3.14, so `pip install .[crewai]` is a no-op there and that path has never run.
-  The code is complete and the deterministic path it delegates execution to is
-  fully tested, but treat the crew itself as unverified until you run it on
-  3.11–3.13. Selecting it without the package now fails at startup rather than
-  silently escalating every ticket.
-* **Live model calls.** `SWARM_LLM_ENABLED=true` routes through LiteLLM; the
-  gateway's logic is tested, but no real provider has been called.
-* **Postgres and Redis via `docker compose`.** The schema and compose file are
-  written; the test suite runs on SQLite and the in-process session store.
+* **A full crew run against a live model.** The wiring is tested; `kickoff()`
+  with real credentials is not. CrewAI supports Python `<3.14`, so if you develop
+  on 3.14 the extra is a no-op locally and CI is your only signal.
+* **Live LiteLLM calls.** `SWARM_LLM_ENABLED=true` routes through the gateway;
+  its parsing and retry logic are tested, but no provider has been called.
+* **Postgres and Redis via `docker compose`.** The image itself is verified — CI
+  builds it, starts it and waits for `/healthz` — but the multi-service compose
+  stack has not been brought up.
 
 **Known limits by design:**
 
