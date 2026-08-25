@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from tests.conftest import API_KEY_ADMIN, API_KEY_AGENT
 
 from support_swarm.api.main import create_app
+from tests.conftest import API_KEY_ADMIN, API_KEY_AGENT
 
 AGENT = {"X-API-Key": API_KEY_AGENT}
 ADMIN = {"X-API-Key": API_KEY_ADMIN}
