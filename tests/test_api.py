@@ -207,3 +207,29 @@ def test_default_api_keys_provide_both_privilege_levels(monkeypatch):
     parsed = Settings(_env_file=None).api_key_scopes()
     assert parsed["dev-key"] == {"agent"}
     assert parsed["dev-admin-key"] == {"agent", "admin"}
+
+
+# --- orchestrator selection ------------------------------------------------- #
+
+
+def test_selecting_crewai_without_the_package_fails_loudly(monkeypatch):
+    """A missing optional dependency must not masquerade as "escalates everything".
+
+    Skipped where CrewAI is installed; it asserts the missing-package path,
+    which is the one a misconfigured deployment actually hits.
+    """
+    from importlib.util import find_spec
+
+    if find_spec("crewai") is not None:
+        pytest.skip("crewai is installed")
+
+    from support_swarm.agents.service import build_orchestrator
+    from support_swarm.config import reset_settings_cache
+
+    monkeypatch.setenv("SWARM_ORCHESTRATOR", "crewai")
+    reset_settings_cache()
+    try:
+        with pytest.raises(RuntimeError, match="requires CrewAI"):
+            build_orchestrator()
+    finally:
+        reset_settings_cache()

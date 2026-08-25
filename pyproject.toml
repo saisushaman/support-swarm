@@ -25,7 +25,10 @@ postgres = ["asyncpg>=0.29"]
 sqlite = ["aiosqlite>=0.20"]
 redis = ["redis>=5.0"]
 llm = ["litellm>=1.44"]
-crewai = ["crewai>=0.60"]
+# CrewAI does not support Python 3.14 yet (every release caps at <3.14), so
+# the marker keeps `pip install .[crewai]` from hard-failing there. The
+# orchestrator raises a clear error if you select it without the package.
+crewai = ["crewai>=0.60; python_version < '3.14'"]
 dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",

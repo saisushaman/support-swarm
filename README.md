@@ -94,7 +94,9 @@ stub providers so nothing external is touched.
 * `SWARM_ORCHESTRATOR=crewai` — a hierarchical CrewAI crew (manager + workers)
   does the *analysis* with the read-only tools bridged in. Its output is a
   **proposal**; execution returns to the same policed path. A jailbroken crew
-  produces a bad proposal, not a bad outcome. Needs `pip install -e ".[crewai]"`.
+  produces a bad proposal, not a bad outcome. Needs `pip install -e ".[crewai]"`
+  and **Python 3.11–3.13** — CrewAI does not support 3.14 yet. See
+  [Status](#status-what-is-verified-and-what-is-not).
 
 Set `SWARM_LLM_ENABLED=true` to route triage and QA judgement through LiteLLM
 (`llm/gateway.py`). The model can only *tighten* a QA verdict, never loosen one,
@@ -127,9 +129,10 @@ curl -s -X POST localhost:8000/v1/tickets/$TICKET/approve \
 pytest
 ```
 
-The suite covers the guardrails directly — refund ceilings and windows, scope
-denial, fraud-hold refusal, identity mismatch, injection containment, idempotent
-replay, QA veto — plus each end-to-end terminal state and the API contract.
+177 tests. They cover the guardrails directly — refund ceilings and windows,
+scope denial, fraud-hold refusal, identity mismatch, injection containment,
+idempotent replay, QA veto — plus each end-to-end terminal state, the API
+contract, and the real HTTP provider path.
 
 ## Configuration
 
@@ -157,11 +160,38 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the request lifecycle and
 the threat model, and [`docs/GUARDRAILS.md`](docs/GUARDRAILS.md) for every rule
 the policy engine enforces and why.
 
-## Status and limits
+## Status: what is verified, and what is not
 
-Honest about what this is: the domain APIs behind it are stub providers by
-default, so `SWARM_PROVIDER_MODE=http` needs real identity/billing endpoints
-matching `providers/http.py`. The intent classifier is deliberately a small rule
-set — the point of the project is the guardrail architecture, not
-state-of-the-art classification. `MemorySessionStore` is process-local, so
-multi-worker deployments need Redis.
+**Verified end to end** (177 tests, ruff clean):
+
+* the full pipeline over HTTP — file a ticket, get a resolved/held/escalated
+  outcome, read the audit transcript;
+* every terminal state: resolved, held for approval, denied, escalated, failed;
+* the hold → escalate → human-approve → execute → reply loop;
+* all guardrails, including boundary cases on both refund limits;
+* the real REST provider path (`providers/http.py`) against a live ASGI service,
+  including that a declined refund is never retried;
+* the LLM gateway's parsing and retry classification.
+
+**Written but not executed here:**
+
+* **The CrewAI orchestrator.** CrewAI supports Python `<3.14`; this was built on
+  3.14, so `pip install .[crewai]` is a no-op there and that path has never run.
+  The code is complete and the deterministic path it delegates execution to is
+  fully tested, but treat the crew itself as unverified until you run it on
+  3.11–3.13. Selecting it without the package now fails at startup rather than
+  silently escalating every ticket.
+* **Live model calls.** `SWARM_LLM_ENABLED=true` routes through LiteLLM; the
+  gateway's logic is tested, but no real provider has been called.
+* **Postgres and Redis via `docker compose`.** The schema and compose file are
+  written; the test suite runs on SQLite and the in-process session store.
+
+**Known limits by design:**
+
+* Providers are stubs by default. `SWARM_PROVIDER_MODE=http` expects endpoints
+  matching the shapes in `providers/http.py`.
+* The intent classifier is a small rule set on purpose — the subject here is the
+  guardrail architecture, not state-of-the-art classification.
+* `MemorySessionStore` is process-local; multi-worker deployments need Redis.
+* An `admin` API key can approve anything the engine would hold. It cannot
+  override an outright denial, but it is a trusted role.

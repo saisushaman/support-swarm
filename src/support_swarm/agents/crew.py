@@ -103,6 +103,12 @@ class CrewOrchestrator:
     name = "crewai"
 
     def __init__(self, llm: LLMGateway | None = None) -> None:
+        # Fail loudly at construction. Without this the missing dependency
+        # surfaces once per ticket, deep inside a resolution, where the generic
+        # error handler turns it into an escalation -- so a misconfigured
+        # deployment would look like "the swarm escalates everything" instead of
+        # "CrewAI is not installed".
+        _require_crewai()
         # Execution, QA, escalation and finalisation are shared with the
         # reference pipeline rather than reimplemented.
         self._pipeline = DeterministicOrchestrator(llm)

@@ -27,11 +27,18 @@ async def lifespan(app: FastAPI):
     # migration and this is a no-op against an existing schema.
     if settings.database_url.startswith("sqlite"):
         await create_all()
+    # Build the configured orchestrator once up front: a deployment that names
+    # an orchestrator it cannot construct should refuse to start, not accept
+    # traffic and escalate every ticket.
+    from ..agents.service import build_orchestrator
+
+    orchestrator = build_orchestrator()
+
     log.info(
         "support swarm starting",
         extra={
             "version": __version__,
-            "orchestrator": settings.orchestrator,
+            "orchestrator": orchestrator.name,
             "provider_mode": settings.provider_mode,
             "llm_enabled": settings.llm_enabled,
         },
